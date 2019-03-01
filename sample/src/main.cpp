@@ -1,8 +1,9 @@
 #include <llvm_experiments/core/sample.hpp>
+#include "llvm/Support/InitLLVM.h"
+
 #include "clang/Tooling/Tooling.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Frontend/CompilerInstance.h"
-
 
 class MyVisitor : public clang::RecursiveASTVisitor<MyVisitor>
 {
@@ -12,11 +13,8 @@ public:
      D->dump();
      return true;
      }
-    bool VisitDeclaratorDecl(clang::DeclaratorDecl *D)
+    bool VisitEnumDecl(clang::EnumDecl *D)
     {
-        llvm::outs() << D->getNameAsString();
-        //llvm::outs() << "------------------------------------------\n";
-        
         return true;
     }
 };
@@ -42,28 +40,22 @@ protected:
     }
 };
 
-int main()
+static llvm::cl::list<std::string> InputFilenames(llvm::cl::Positional, llvm::cl::desc("<input files>"), llvm::cl::ZeroOrMore);
+
+int main(int argc, char **argv)
 {
+    llvm::InitLLVM X(argc, argv);
+    llvm::cl::ParseCommandLineOptions(argc, argv, "llvm object size dumper\n");
     
-    
-     const bool ret = clang::tooling::runToolOnCode(new MyAction,
-     "struct MyStruct {};"
-     "class MyClass {};"
-     "namespace Nspace {"
-     "class MyDerived : public MyStruct {};"
-     "class MyDerived2 : public MyDerived, public virtual MyClass {};"
-     "}");
-    
-    /*const bool ret = clang::tooling::runToolOnCode(new MyAction,
-                                                   "enum enNotifyIds"
-                                                   "{"
-                                                   "eNotify_None = 0,"
-                                                   "eNotify_Any_InternalError = 101,"
-                                                   "eNotify_Product_LicenceAgreementViolated = 201,"
-                                                   "eNotify_Product_LicenceAlmostExpired = 203,"
-                                                   "eNotify_Product_LicenceExpiresSoon = 204,"
-                                                   "};");*/
-    return ret ? 0 : -1;
-    //return 0;
+    for (const auto &file : InputFilenames)
+    {
+        llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> Buffer = llvm::MemoryBuffer::getFileOrSTDIN(file);
+        if (std::error_code EC = Buffer.getError())
+            llvm::errs() << file << ": " << EC.message() << '\n';
+        else
+            clang::tooling::runToolOnCode(new MyAction, Buffer.get()->getMemBufferRef().getBuffer());
+
+    }
+  return EXIT_SUCCESS;
 }
 
